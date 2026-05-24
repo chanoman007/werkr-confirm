@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Werkr — Confirmación de Presupuesto</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 24px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: #0066cc;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 22px; font-weight: 900;
+    }
+    .logo-text { font-size: 22px; font-weight: 700; color: #0066cc; }
+    h2 { font-size: 18px; color: #1a1a2e; margin-bottom: 6px; }
+    .numero { color: #888; font-size: 14px; margin-bottom: 20px; }
+    .seccion { margin-bottom: 16px; }
+    .seccion-titulo {
+      font-size: 11px; font-weight: 700; color: #0066cc;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .dato { font-size: 15px; color: #333; margin-bottom: 4px; }
+    .item-row {
+      display: flex; justify-content: space-between;
+      padding: 8px 0; border-bottom: 1px solid #f0f0f0;
+      font-size: 14px; color: #444;
+    }
+    .item-row:last-child { border-bottom: none; }
+    .item-desc { flex: 1; }
+    .item-precio { font-weight: 600; color: #1a1a2e; }
+    .total-box {
+      background: #f0f4f8; border-radius: 10px;
+      padding: 16px; margin: 20px 0;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .total-label { font-size: 15px; color: #555; }
+    .total-valor { font-size: 22px; font-weight: 700; color: #0066cc; }
+    .vigencia {
+      background: #fff8e1; border-radius: 8px;
+      padding: 10px 14px; font-size: 13px; color: #666;
+      margin-bottom: 24px;
+    }
+    .botones { display: flex; gap: 12px; }
+    .btn {
+      flex: 1; padding: 16px; border-radius: 12px;
+      border: none; font-size: 16px; font-weight: 700;
+      cursor: pointer; transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-aceptar { background: #34c759; color: #fff; }
+    .btn-rechazar { background: #ff3b30; color: #fff; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .resultado {
+      text-align: center; padding: 32px 0;
+    }
+    .resultado-icon { font-size: 64px; margin-bottom: 16px; }
+    .resultado-titulo { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .resultado-sub { font-size: 15px; color: #888; }
+    .loading { text-align: center; padding: 40px; color: #888; }
+    .error { text-align: center; padding: 40px; color: #ff3b30; }
+  </style>
+</head>
+<body>
+<div class="card" id="app">
+  <div class="loading">Cargando presupuesto...</div>
+</div>
+
+<script>
+  const SUPABASE_URL  = 'https://mjzingmrjtarjtfbszgi.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qemluZ21yanRhcmp0ZmJzemdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5NTM3NzgsImV4cCI6MjA5NDUyOTc3OH0.qHFcJVy0AR961OBAo7hM7v2u71sInl5FAOEg9hnf4XY';
+
+  const fmt = (n) => '$' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 });
+
+  const getId = () => {
+    const parts = window.location.pathname.split('/');
+    return parts[parts.length - 1];
+  };
+
+  const supabase = async (method, path, body) => {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+      method,
+      headers: {
+        'apikey': SUPABASE_ANON,
+        'Authorization': 'Bearer ' + SUPABASE_ANON,
+        'Content-Type': 'application/json',
+        'Prefer': method === 'PATCH' ? 'return=minimal' : 'return=representation',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) throw new Error('Error ' + res.status);
+    return method === 'PATCH' ? null : res.json();
+  };
+
+  const render = (html) => { document.getElementById('app').innerHTML = html; };
+
+  const mostrarResultado = (aceptado) => {
+    render(`
+      <div class="logo"><div class="logo-icon">W</div><span class="logo-text">Werkr</span></div>
+      <div class="resultado">
+        <div class="resultado-icon">${aceptado ? '✅' : '❌'}</div>
+        <div class="resultado-titulo" style="color:${aceptado ? '#34c759' : '#ff3b30'}">
+          Presupuesto ${aceptado ? 'aceptado' : 'rechazado'}
+        </div>
+        <div class="resultado-sub">Tu respuesta fue registrada. El técnico será notificado.</div>
+      </div>
+    `);
+  };
+
+  const confirmar = async (id, estado) => {
+    document.querySelectorAll('.btn').forEach(b => b.disabled = true);
+    try {
+      await supabase('PATCH', `presupuestos?id=eq.${id}`, { estado });
+      mostrarResultado(estado === 'aprobado');
+    } catch (e) {
+      alert('Error al registrar tu respuesta. Intentá de nuevo.');
+      document.querySelectorAll('.btn').forEach(b => b.disabled = false);
+    }
+  };
+
+  const init = async () => {
+    const id = getId();
+    if (!id || id === 'presupuesto') {
+      render('<div class="error">Link inválido.</div>');
+      return;
+    }
+
+    try {
+      const data = await supabase('GET', `presupuestos?id=eq.${id}&select=*`);
+      if (!data?.length) { render('<div class="error">Presupuesto no encontrado.</div>'); return; }
+
+      const p = data[0];
+
+      if (p.estado === 'aprobado' || p.estado === 'rechazado') {
+        mostrarResultado(p.estado === 'aprobado');
+        return;
+      }
+
+      const items = (p.items || []).map(it => {
+        const q = parseFloat(it.cantidad) || 0;
+        const pr = parseFloat(it.precio) || 0;
+        return `<div class="item-row">
+          <span class="item-desc">${it.descripcion} × ${q}</span>
+          <span class="item-precio">${fmt(q * pr)}</span>
+        </div>`;
+      }).join('');
+
+      const vence = p.vigencia_dias ? (() => {
+        const d = new Date(p.created_at);
+        d.setDate(d.getDate() + p.vigencia_dias);
+        return d.toLocaleDateString('es-AR');
+      })() : null;
+
+      render(`
+        <div class="logo"><div class="logo-icon">W</div><span class="logo-text">Werkr</span></div>
+        <h2>Presupuesto para ${p.cliente_nombre || 'Cliente'}</h2>
+        <div class="numero">N° ${String(p.numero_presupuesto).padStart(4,'0')}</div>
+
+        ${p.cliente_direccion ? `<div class="seccion"><div class="seccion-titulo">Dirección</div><div class="dato">${p.cliente_direccion}</div></div>` : ''}
+
+        <div class="seccion">
+          <div class="seccion-titulo">Detalle</div>
+          ${items}
+        </div>
+
+        <div class="total-box">
+          <span class="total-label">Total</span>
+          <span class="total-valor">${fmt(p.total)}</span>
+        </div>
+
+        ${vence ? `<div class="vigencia">⏱ Este presupuesto vence el <strong>${vence}</strong></div>` : ''}
+
+        ${p.notas ? `<div class="seccion"><div class="seccion-titulo">Notas</div><div class="dato">${p.notas}</div></div>` : ''}
+
+        <div class="botones">
+          <button class="btn btn-rechazar" onclick="confirmar('${id}', 'rechazado')">❌ Rechazar</button>
+          <button class="btn btn-aceptar"  onclick="confirmar('${id}', 'aprobado')">✅ Aceptar</button>
+        </div>
+      `);
+    } catch (e) {
+      render('<div class="error">No se pudo cargar el presupuesto.</div>');
+    }
+  };
+
+  init();
+</script>
+</body>
+</html>
