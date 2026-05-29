@@ -1,0 +1,23 @@
+{
+  "name": "werkr-confirm",
+  "version": "1.0.0",
+  "description": "Confirmacion de presupuestos",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chanoman007/werkr-confirm.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/chanoman007/werkr-confirm/issues"
+  },
+  "homepage": "https://github.com/chanoman007/werkr-confirm#readme",
+  "dependencies": {
+    "node-forge": "^1.4.0"
+  }
+}
