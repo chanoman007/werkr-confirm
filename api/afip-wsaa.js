@@ -66,7 +66,8 @@ export default async function handler(req, res) {
 
     const token = extract(wsaaText, 'token');
     const sign  = extract(wsaaText, 'sign');
-
+    
+    console.log('WSAA response:', wsaaText);
     if (!token || !sign) throw new Error(`WSAA error: ${wsaaText}`);
 
     return res.status(200).json({ ok: true, token, sign });
