@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/chanoman007/werkr-confirm#readme",
   "dependencies": {
+    "@supabase/supabase-js": "^2.107.0",
     "node-forge": "^1.4.0"
   }
 }
