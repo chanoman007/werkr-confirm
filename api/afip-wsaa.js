@@ -1,5 +1,6 @@
 const forge = require('node-forge');
 const https = require('https');
+const { createClient } = require('@supabase/supabase-js');
 
 const agent = new https.Agent({ rejectUnauthorized: false });
 
@@ -10,10 +11,25 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   try {
-    const { afip_cert, afip_key, afip_cuit } = req.body;
+    const { empresa_id } = req.body;
+
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_KEY
+    );
+
+    const { data: empresa, error } = await supabase
+      .from('empresas')
+      .select('afip_cuit, afip_cert, afip_key')
+      .eq('id', empresa_id)
+      .single();
+
+    if (error || !empresa) return res.status(400).json({ error: 'Empresa no encontrada' });
+
+    const { afip_cert, afip_key, afip_cuit } = empresa;
 
     if (!afip_cert || !afip_key || !afip_cuit) {
-      return res.status(400).json({ error: 'Faltan cert, key o cuit' });
+      return res.status(400).json({ error: 'Certificados no configurados' });
     }
 
     const now  = new Date();
@@ -64,10 +80,11 @@ export default async function handler(req, res) {
       agent
     );
 
+    console.log('WSAA response:', wsaaText);
+
     const token = extract(wsaaText, 'token');
     const sign  = extract(wsaaText, 'sign');
-    
-    console.log('WSAA response:', wsaaText);
+
     if (!token || !sign) throw new Error(`WSAA error: ${wsaaText}`);
 
     return res.status(200).json({ ok: true, token, sign });
