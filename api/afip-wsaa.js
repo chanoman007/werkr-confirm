@@ -1,4 +1,7 @@
 const forge = require('node-forge');
+const https = require('https');
+
+const agent = new https.Agent({ rejectUnauthorized: false });
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,7 +16,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Faltan cert, key o cuit' });
     }
 
-    // Generar TRA
     const now  = new Date();
     const from = new Date(now.getTime() - 60000).toISOString();
     const to   = new Date(now.getTime() + 43200000).toISOString();
@@ -28,7 +30,6 @@ export default async function handler(req, res) {
   <service>wsfe</service>
 </loginTicketRequest>`;
 
-    // Firmar TRA con PKCS7
     const cert       = forge.pki.certificateFromPem(afip_cert);
     const privateKey = forge.pki.privateKeyFromPem(afip_key);
 
@@ -47,7 +48,6 @@ export default async function handler(req, res) {
       forge.asn1.toDer(p7.toAsn1()).getBytes()
     );
 
-    // Llamar WSAA homologación ARCA
     const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov.ar">
   <soapenv:Header/>
@@ -58,13 +58,11 @@ export default async function handler(req, res) {
   </soapenv:Body>
 </soapenv:Envelope>`;
 
-    const wsaaResp = await fetch('https://wsaahomo.arca.gob.ar/ws/services/LoginCms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '' },
-      body: soapBody,
-    });
-
-    const wsaaText = await wsaaResp.text();
+    const wsaaText = await soapPost(
+      'https://wsaahomo.arca.gob.ar/ws/services/LoginCms',
+      soapBody,
+      agent
+    );
 
     const token = extract(wsaaText, 'token');
     const sign  = extract(wsaaText, 'sign');
@@ -76,6 +74,31 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
+}
+
+function soapPost(url, body, agent) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const options = {
+      hostname: urlObj.hostname,
+      path: urlObj.pathname,
+      method: 'POST',
+      agent,
+      headers: {
+        'Content-Type': 'text/xml; charset=utf-8',
+        'SOAPAction': '',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve(data));
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
 }
 
 function extract(xml, tag) {
