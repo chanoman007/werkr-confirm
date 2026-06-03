@@ -53,4 +53,4 @@ module.exports = async function handler(req, res) {
         authenticatedAttributes: [],
       });
       p7.sign({ detached: false });
-      cmsB64 = forge.util.encode64(forge.asn1.toDer(p7.to
+      cmsB64 = forge.util.encode64(forge.asn1.toDer(p7.toAsn1()).getBytes());
