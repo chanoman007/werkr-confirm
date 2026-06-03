@@ -28,33 +28,24 @@ module.exports = async function handler(req, res) {
 
     const { afip_cert, afip_key, afip_cuit } = empresa;
 
-    console.log('cert inicio:', afip_cert ? afip_cert.substring(0, 50) : 'VACIO');
-    console.log('key inicio:', afip_key ? afip_key.substring(0, 50) : 'VACIO');
-    console.log('cuit:', afip_cuit);
-
     if (!afip_cert || !afip_key || !afip_cuit) {
       return res.status(400).json({ error: 'Certificados no configurados' });
     }
 
     const now  = new Date();
-    const from = new Date(now.getTime() - 60000).toISOString();
-    const to   = new Date(now.getTime() + 43200000).toISOString();
+    const from = toARCADate(new Date(now.getTime() - 60000));
+    const to   = toARCADate(new Date(now.getTime() + 43200000));
+    const uid  = Math.floor(now.getTime() / 1000);
 
-    const tra = `<?xml version="1.0" encoding="UTF-8"?>
-<loginTicketRequest version="1.0">
-  <header>
-    <uniqueId>${Date.now()}</uniqueId>
-    <generationTime>${from}</generationTime>
-    <expirationTime>${to}</expirationTime>
-  </header>
-  <service>wsfe</service>
-</loginTicketRequest>`;
+    const tra = `<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>${uid}</uniqueId><generationTime>${from}</generationTime><expirationTime>${to}</expirationTime></header><service>wsfe</service></loginTicketRequest>`;
 
-    let cert, privateKey, p7, cmsB64;
+    console.log('TRA:', tra);
+
+    let cmsB64;
     try {
-      cert = forge.pki.certificateFromPem(afip_cert);
-      privateKey = forge.pki.privateKeyFromPem(afip_key);
-      p7 = forge.pkcs7.createSignedData();
+      const cert       = forge.pki.certificateFromPem(afip_cert);
+      const privateKey = forge.pki.privateKeyFromPem(afip_key);
+      const p7 = forge.pkcs7.createSignedData();
       p7.content = forge.util.createBuffer(tra, 'utf8');
       p7.addCertificate(cert);
       p7.addSigner({
@@ -65,21 +56,13 @@ module.exports = async function handler(req, res) {
       });
       p7.sign({ detached: false });
       cmsB64 = forge.util.encode64(forge.asn1.toDer(p7.toAsn1()).getBytes());
-      console.log('CMS generado OK, largo:', cmsB64.length);
+      console.log('CMS OK, largo:', cmsB64.length);
     } catch(forgeErr) {
       console.log('ERROR forge:', forgeErr.message);
       return res.status(500).json({ error: 'forge: ' + forgeErr.message });
     }
 
-    const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov.ar">
-  <soapenv:Header/>
-  <soapenv:Body>
-    <wsaa:loginCms>
-      <wsaa:in0>${cmsB64}</wsaa:in0>
-    </wsaa:loginCms>
-  </soapenv:Body>
-</soapenv:Envelope>`;
+    const soapBody = `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov.ar"><soapenv:Header/><soapenv:Body><wsaa:loginCms><wsaa:in0>${cmsB64}</wsaa:in0></wsaa:loginCms></soapenv:Body></soapenv:Envelope>`;
 
     const wsaaText = await soapPost(
       'https://wsaa.arca.gob.ar/ws/services/LoginCms',
@@ -100,6 +83,11 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: e.message });
   }
 };
+
+function toARCADate(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}-00:00`;
+}
 
 function soapPost(url, body, agent) {
   return new Promise((resolve, reject) => {
