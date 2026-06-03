@@ -1,3 +1,6 @@
+export const config = {
+  regions: ['gru1'],
+};
 const forge = require('node-forge');
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
