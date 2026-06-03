@@ -50,23 +50,26 @@ module.exports = async function handler(req, res) {
   <service>wsfe</service>
 </loginTicketRequest>`;
 
-    const cert       = forge.pki.certificateFromPem(afip_cert);
-    const privateKey = forge.pki.privateKeyFromPem(afip_key);
-
-    const p7 = forge.pkcs7.createSignedData();
-    p7.content = forge.util.createBuffer(tra, 'utf8');
-    p7.addCertificate(cert);
-    p7.addSigner({
-      key: privateKey,
-      certificate: cert,
-      digestAlgorithm: forge.pki.oids.sha256,
-      authenticatedAttributes: [],
-    });
-    p7.sign({ detached: false });
-
-    const cmsB64 = forge.util.encode64(
-      forge.asn1.toDer(p7.toAsn1()).getBytes()
-    );
+    let cert, privateKey, p7, cmsB64;
+    try {
+      cert = forge.pki.certificateFromPem(afip_cert);
+      privateKey = forge.pki.privateKeyFromPem(afip_key);
+      p7 = forge.pkcs7.createSignedData();
+      p7.content = forge.util.createBuffer(tra, 'utf8');
+      p7.addCertificate(cert);
+      p7.addSigner({
+        key: privateKey,
+        certificate: cert,
+        digestAlgorithm: forge.pki.oids.sha256,
+        authenticatedAttributes: [],
+      });
+      p7.sign({ detached: false });
+      cmsB64 = forge.util.encode64(forge.asn1.toDer(p7.toAsn1()).getBytes());
+      console.log('CMS generado OK, largo:', cmsB64.length);
+    } catch(forgeErr) {
+      console.log('ERROR forge:', forgeErr.message);
+      return res.status(500).json({ error: 'forge: ' + forgeErr.message });
+    }
 
     const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov.ar">
@@ -96,10 +99,6 @@ module.exports = async function handler(req, res) {
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
-};
-
-module.exports.config = {
-  regions: ['gru1'],
 };
 
 function soapPost(url, body, agent) {
