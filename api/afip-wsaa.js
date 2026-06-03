@@ -37,7 +37,7 @@ module.exports = async function handler(req, res) {
     const to   = toARCADate(new Date(now.getTime() + 43200000));
     const uid  = Math.floor(now.getTime() / 1000);
 
-    const tra = `<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>${uid}</uniqueId><generationTime>${from}</generationTime><expirationTime>${to}</expirationTime></header><service>wsfe</service></loginTicketRequest>`;
+    const tra = '<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>' + uid + '</uniqueId><generationTime>' + from + '</generationTime><expirationTime>' + to + '</expirationTime></header><service>wsfe</service></loginTicketRequest>';
 
     let cmsB64;
     try {
@@ -54,3 +54,66 @@ module.exports = async function handler(req, res) {
       });
       p7.sign({ detached: false });
       cmsB64 = forge.util.encode64(forge.asn1.toDer(p7.toAsn1()).getBytes());
+    } catch(forgeErr) {
+      return res.status(500).json({ error: 'forge: ' + forgeErr.message });
+    }
+
+    const soapBody = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov.ar"><soapenv:Header/><soapenv:Body><wsaa:loginCms><wsaa:in0>' + cmsB64 + '</wsaa:in0></wsaa:loginCms></soapenv:Body></soapenv:Envelope>';
+
+    const wsaaText = await soapPost(
+      'https://wsaa.arca.gob.ar/ws/services/LoginCms',
+      soapBody,
+      agent
+    );
+
+    const token = extract(wsaaText, 'token');
+    const sign  = extract(wsaaText, 'sign');
+
+    if (!token || !sign) throw new Error('WSAA error: ' + wsaaText);
+
+    return res.status(200).json({ ok: true, token, sign });
+
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+};
+
+function toARCADate(d) {
+  const pad = function(n) { return String(n).padStart(2, '0'); };
+  return d.getUTCFullYear() + '-' + pad(d.getUTCMonth()+1) + '-' + pad(d.getUTCDate()) + 'T' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds()) + '-00:00';
+}
+
+function soapPost(url, body, agent) {
+  return new Promise(function(resolve, reject) {
+    const urlObj = new URL(url);
+    const options = {
+      hostname: urlObj.hostname,
+      path: urlObj.pathname,
+      method: 'POST',
+      agent: agent,
+      headers: {
+        'Content-Type': 'text/xml; charset=utf-8',
+        'SOAPAction': '',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(options, function(res) {
+      let data = '';
+      res.on('data', function(chunk) { data += chunk; });
+      res.on('end', function() { resolve(data); });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+function extract(xml, tag) {
+  const decoded = xml
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&');
+  const m = decoded.match(new RegExp('<' + tag + '>([\\s\\S]*?)<\\/' + tag + '>'));
+  return m ? m[1].trim() : '';
+}
