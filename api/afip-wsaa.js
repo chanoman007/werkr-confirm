@@ -1,3 +1,6 @@
+console.log('cert inicio:', afip_cert ? afip_cert.substring(0, 50) : 'VACIO');
+console.log('key inicio:', afip_key ? afip_key.substring(0, 50) : 'VACIO');
+console.log('cuit:', afip_cuit);
 export const config = {
   regions: ['gru1'],
 };
