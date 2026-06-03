@@ -82,7 +82,7 @@ module.exports = async function handler(req, res) {
 </soapenv:Envelope>`;
 
     const wsaaText = await soapPost(
-      'https://wsaahomo.arca.gob.ar/ws/services/LoginCms',
+      'https://wsaa.arca.gob.ar/ws/services/LoginCms',
       soapBody,
       agent
     );
