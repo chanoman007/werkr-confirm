@@ -173,7 +173,6 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
     '<Concepto>' + concepto + '</Concepto>' +
     '<DocTipo>' + (cuitReceptor !== '0' ? '80' : '99') + '</DocTipo>' +
     '<DocNro>' + cuitReceptor + '</DocNro>' +
-    '<CondicionIVAReceptorId>' + getCondicionIVA(receptor_condicion) + '</CondicionIVAReceptorId>' +
     '<CbteDesde>' + nro + '</CbteDesde>' +
     '<CbteHasta>' + nro + '</CbteHasta>' +
     '<CbteFch>' + fecha + '</CbteFch>' +
@@ -186,6 +185,7 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
     '<MonId>PES</MonId>' +
     '<MonCotiz>1</MonCotiz>' +
     ivaXml +
+    '<CondicionIVAReceptorId>' + getCondicionIVA(receptor_condicion) + '</CondicionIVAReceptorId>' +
     '</FECAEDetRequest></FeDetReq>' +
     '</FeCAEReq>' +
     '</FECAESolicitar></soap:Body></soap:Envelope>';
