@@ -2,7 +2,11 @@ const forge = require('node-forge');
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
 
-const agent = new https.Agent({ rejectUnauthorized: false });
+const agent = new https.Agent({ 
+  rejectUnauthorized: false,
+  ciphers: 'DEFAULT:@SECLEVEL=0',
+  secureOptions: require('crypto').constants.SSL_OP_LEGACY_SERVER_CONNECT,
+});
 const WSFE_URL = 'https://servicios1.arca.gob.ar/wsfev1/service.asmx';
 const WSAA_URL = 'https://wsaa.arca.gob.ar/ws/services/LoginCms';
 
