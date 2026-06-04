@@ -180,8 +180,8 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
     '<ImpTotConc>0</ImpTotConc>' +
     '<ImpNeto>' + neto + '</ImpNeto>' +
     '<ImpOpEx>0</ImpOpEx>' +
-    '<ImpIVA>' + iva + '</ImpIVA>' +
     '<ImpTrib>0</ImpTrib>' +
+    '<ImpIVA>' + iva + '</ImpIVA>' +
     '<MonId>PES</MonId>' +
     '<MonCotiz>1</MonCotiz>' +
     ivaXml +
