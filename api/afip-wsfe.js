@@ -152,7 +152,7 @@ function toARCADate(d) {
 
 function buildSoapUltimoNro(cuit, token, sign, ptoVta, tipoCbte) {
   return '<?xml version="1.0" encoding="utf-8"?>' +
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">' +
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">' +
     '<soap:Body><FECompUltimoAutorizado xmlns="http://ar.gov.afip.dif.FEV1/">' +
     '<Auth><Token>' + token + '</Token><Sign>' + sign + '</Sign><Cuit>' + cuit + '</Cuit></Auth>' +
     '<PtoVta>' + ptoVta + '</PtoVta><CbteTipo>' + tipoCbte + '</CbteTipo>' +
