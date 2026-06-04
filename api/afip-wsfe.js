@@ -1,10 +1,10 @@
+const forge = require('node-forge');
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
 
 const agent = new https.Agent({ rejectUnauthorized: false });
-
 const WSFE_URL = 'https://wswhomo.arca.gob.ar/wsfev1/service.asmx';
-const WSAA_URL = 'https://werkr-confirm.vercel.app/api/afip-wsaa';
+const WSAA_URL = 'https://wsaa.arca.gob.ar/ws/services/LoginCms';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,14 +14,12 @@ module.exports = async function handler(req, res) {
 
   try {
     const { empresa_id, trabajo_id, importe, concepto, receptor } = req.body;
-    // receptor: { nombre, cuit, condicion } condicion: 'RI' | 'monotributo' | 'consumidor_final'
 
     const supabase = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_KEY
     );
 
-    // 1. Obtener datos de la empresa
     const { data: empresa, error } = await supabase
       .from('empresas')
       .select('afip_cuit, afip_cert, afip_key, afip_punto_venta, afip_condicion')
@@ -32,40 +30,30 @@ module.exports = async function handler(req, res) {
 
     const ptoVta = empresa.afip_punto_venta;
     const cuitEmisor = empresa.afip_cuit;
-
-    // 2. Determinar tipo de factura
     const tipoComprobante = getTipoComprobante(empresa.afip_condicion, receptor.condicion);
 
-    // 3. Obtener token y sign del WSAA
-    const wsaaResp = await fetch(WSAA_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ empresa_id }),
-    });
-    const wsaaData = await wsaaResp.json();
-    if (!wsaaData.token || !wsaaData.sign) throw new Error('WSAA error: ' + JSON.stringify(wsaaData));
+    // WSAA inline
+    const { token, sign } = await getToken(empresa.afip_cert, empresa.afip_key);
 
-    const { token, sign } = wsaaData;
-
-    // 4. Obtener último número de comprobante
+    // Ultimo numero
     const ultimoNroSoap = buildSoapUltimoNro(cuitEmisor, token, sign, ptoVta, tipoComprobante);
-    const ultimoNroText = await soapPost(WSFE_URL, ultimoNroSoap, 'FECompUltimoAutorizado', agent);
+    const ultimoNroText = await soapPost(WSFE_URL, ultimoNroSoap, 'FECompUltimoAutorizado');
     const ultimoNro = parseInt(extract(ultimoNroText, 'CbteNro')) || 0;
     const nroComprobante = ultimoNro + 1;
 
-    // 5. Emitir factura
+    // Importes
     const fecha = getFechaHoy();
     const importeNeto = parseFloat(importe);
     const iva = tipoComprobante === 1 ? parseFloat((importeNeto * 0.21).toFixed(2)) : 0;
     const importeTotal = tipoComprobante === 1 ? parseFloat((importeNeto + iva).toFixed(2)) : importeNeto;
 
+    // Emitir
     const emisorSoap = buildSoapEmitir(
       cuitEmisor, token, sign, ptoVta, tipoComprobante,
       nroComprobante, fecha, importeNeto, iva, importeTotal,
       receptor.cuit || '0', concepto || 1
     );
-
-    const emisorText = await soapPost(WSFE_URL, emisorSoap, 'FECAESolicitar', agent);
+    const emisorText = await soapPost(WSFE_URL, emisorSoap, 'FECAESolicitar');
 
     console.log('WSFEv1 response:', emisorText);
 
@@ -74,11 +62,8 @@ module.exports = async function handler(req, res) {
     const resultado = extract(emisorText, 'Resultado');
     const errMsg = extract(emisorText, 'Msg');
 
-    if (!cae || resultado !== 'A') {
-      throw new Error('WSFEv1 error: ' + (errMsg || emisorText));
-    }
+    if (!cae || resultado !== 'A') throw new Error('WSFEv1 error: ' + (errMsg || emisorText));
 
-    // 6. Guardar CAE en el trabajo
     if (trabajo_id) {
       await supabase.from('trabajos').update({
         cae,
@@ -104,10 +89,42 @@ module.exports = async function handler(req, res) {
   }
 };
 
+async function getToken(afip_cert, afip_key) {
+  const now  = new Date();
+  const from = toARCADate(new Date(now.getTime() - 60000));
+  const to   = toARCADate(new Date(now.getTime() + 43200000));
+  const uid  = Math.floor(now.getTime() / 1000);
+
+  const tra = '<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>' + uid + '</uniqueId><generationTime>' + from + '</generationTime><expirationTime>' + to + '</expirationTime></header><service>wsfe</service></loginTicketRequest>';
+
+  const cert       = forge.pki.certificateFromPem(afip_cert);
+  const privateKey = forge.pki.privateKeyFromPem(afip_key);
+  const p7 = forge.pkcs7.createSignedData();
+  p7.content = forge.util.createBuffer(tra, 'utf8');
+  p7.addCertificate(cert);
+  p7.addSigner({
+    key: privateKey,
+    certificate: cert,
+    digestAlgorithm: forge.pki.oids.sha256,
+    authenticatedAttributes: [],
+  });
+  p7.sign({ detached: false });
+  const cmsB64 = forge.util.encode64(forge.asn1.toDer(p7.toAsn1()).getBytes());
+
+  const soapBody = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov.ar"><soapenv:Header/><soapenv:Body><wsaa:loginCms><wsaa:in0>' + cmsB64 + '</wsaa:in0></wsaa:loginCms></soapenv:Body></soapenv:Envelope>';
+
+  const wsaaText = await soapPost(WSAA_URL, soapBody, '');
+  const decoded = wsaaText.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  const token = extract(decoded, 'token');
+  const sign  = extract(decoded, 'sign');
+  if (!token || !sign) throw new Error('WSAA error: ' + wsaaText);
+  return { token, sign };
+}
+
 function getTipoComprobante(condicionEmisor, condicionReceptor) {
-  if (condicionEmisor === 'ri' && condicionReceptor === 'RI') return 1;  // Factura A
-  if (condicionEmisor === 'ri') return 6;                                  // Factura B
-  return 11;                                                               // Factura C
+  if (condicionEmisor === 'ri' && condicionReceptor === 'RI') return 1;
+  if (condicionEmisor === 'ri') return 6;
+  return 11;
 }
 
 function getTipoLetra(tipo) {
@@ -118,20 +135,22 @@ function getTipoLetra(tipo) {
 
 function getFechaHoy() {
   const d = new Date();
-  const pad = n => String(n).padStart(2, '0');
+  const pad = function(n) { return String(n).padStart(2, '0'); };
   return '' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate());
+}
+
+function toARCADate(d) {
+  const pad = function(n) { return String(n).padStart(2, '0'); };
+  return d.getUTCFullYear() + '-' + pad(d.getUTCMonth()+1) + '-' + pad(d.getUTCDate()) + 'T' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds()) + '-00:00';
 }
 
 function buildSoapUltimoNro(cuit, token, sign, ptoVta, tipoCbte) {
   return '<?xml version="1.0" encoding="utf-8"?>' +
     '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">' +
-    '<soap:Body>' +
-    '<FECompUltimoAutorizado xmlns="http://ar.gov.afip.dif.FEV1/">' +
+    '<soap:Body><FECompUltimoAutorizado xmlns="http://ar.gov.afip.dif.FEV1/">' +
     '<Auth><Token>' + token + '</Token><Sign>' + sign + '</Sign><Cuit>' + cuit + '</Cuit></Auth>' +
-    '<PtoVta>' + ptoVta + '</PtoVta>' +
-    '<CbteTipo>' + tipoCbte + '</CbteTipo>' +
-    '</FECompUltimoAutorizado>' +
-    '</soap:Body></soap:Envelope>';
+    '<PtoVta>' + ptoVta + '</PtoVta><CbteTipo>' + tipoCbte + '</CbteTipo>' +
+    '</FECompUltimoAutorizado></soap:Body></soap:Envelope>';
 }
 
 function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, iva, total, cuitReceptor, concepto) {
@@ -141,8 +160,7 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
 
   return '<?xml version="1.0" encoding="utf-8"?>' +
     '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">' +
-    '<soap:Body>' +
-    '<FECAESolicitar xmlns="http://ar.gov.afip.dif.FEV1/">' +
+    '<soap:Body><FECAESolicitar xmlns="http://ar.gov.afip.dif.FEV1/">' +
     '<Auth><Token>' + token + '</Token><Sign>' + sign + '</Sign><Cuit>' + cuit + '</Cuit></Auth>' +
     '<FeCAEReq>' +
     '<FeCabReq><CantReg>1</CantReg><PtoVta>' + ptoVta + '</PtoVta><CbteTipo>' + tipoCbte + '</CbteTipo></FeCabReq>' +
@@ -164,11 +182,10 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
     ivaXml +
     '</FECAEDetRequest></FeDetReq>' +
     '</FeCAEReq>' +
-    '</FECAESolicitar>' +
-    '</soap:Body></soap:Envelope>';
+    '</FECAESolicitar></soap:Body></soap:Envelope>';
 }
 
-function soapPost(url, body, action, agent) {
+function soapPost(url, body, action) {
   return new Promise(function(resolve, reject) {
     const urlObj = new URL(url);
     const options = {
@@ -178,7 +195,7 @@ function soapPost(url, body, action, agent) {
       agent: agent,
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
-        'SOAPAction': 'http://ar.gov.afip.dif.FEV1/' + action,
+        'SOAPAction': action ? 'http://ar.gov.afip.dif.FEV1/' + action : '',
         'Content-Length': Buffer.byteLength(body),
       },
     };
