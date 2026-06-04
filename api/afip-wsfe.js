@@ -57,6 +57,7 @@ module.exports = async function handler(req, res) {
       nroComprobante, fecha, importeNeto, iva, importeTotal,
       receptor.cuit || '0', concepto || 1, receptor.condicion
     );
+    console.log('SOAP enviado:', emisorSoap);
     const emisorText = await soapPost(WSFE_URL, emisorSoap, 'FECAESolicitar');
 
     console.log('WSFEv1 response:', emisorText);
