@@ -2,11 +2,7 @@ const forge = require('node-forge');
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
 
-const agent = new https.Agent({ 
-  rejectUnauthorized: false,
-  ciphers: 'DEFAULT:@SECLEVEL=0',
-  secureOptions: require('crypto').constants.SSL_OP_LEGACY_SERVER_CONNECT,
-});
+const agent = new https.Agent({ rejectUnauthorized: false, ciphers: 'DEFAULT:@SECLEVEL=0', secureOptions: require('crypto').constants.SSL_OP_LEGACY_SERVER_CONNECT });
 const WSFE_URL = 'https://servicios1.arca.gob.ar/wsfev1/service.asmx';
 const WSAA_URL = 'https://wsaa.arca.gob.ar/ws/services/LoginCms';
 
@@ -55,7 +51,7 @@ module.exports = async function handler(req, res) {
     const emisorSoap = buildSoapEmitir(
       cuitEmisor, token, sign, ptoVta, tipoComprobante,
       nroComprobante, fecha, importeNeto, iva, importeTotal,
-      receptor.cuit || '0', concepto || 1
+      receptor.cuit || '0', concepto || 1, receptor.condicion
     );
     const emisorText = await soapPost(WSFE_URL, emisorSoap, 'FECAESolicitar');
 
@@ -157,7 +153,7 @@ function buildSoapUltimoNro(cuit, token, sign, ptoVta, tipoCbte) {
     '</FECompUltimoAutorizado></soap:Body></soap:Envelope>';
 }
 
-function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, iva, total, cuitReceptor, concepto) {
+function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, iva, total, cuitReceptor, concepto, receptor_condicion) {
   const ivaXml = tipoCbte === 1
     ? '<AlicIvas><AlicIva><Id>5</Id><BaseImp>' + neto + '</BaseImp><Importe>' + iva + '</Importe></AlicIva></AlicIvas>'
     : '<AlicIvas/>';
@@ -172,6 +168,7 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
     '<Concepto>' + concepto + '</Concepto>' +
     '<DocTipo>' + (cuitReceptor !== '0' ? '80' : '99') + '</DocTipo>' +
     '<DocNro>' + cuitReceptor + '</DocNro>' +
+    '<CondicionIVAReceptorId>' + getCondicionIVA(receptor_condicion) + '</CondicionIVAReceptorId>' +
     '<CbteDesde>' + nro + '</CbteDesde>' +
     '<CbteHasta>' + nro + '</CbteHasta>' +
     '<CbteFch>' + fecha + '</CbteFch>' +
@@ -212,6 +209,13 @@ function soapPost(url, body, action) {
     req.write(body);
     req.end();
   });
+}
+
+function getCondicionIVA(condicion) {
+  if (condicion === 'RI') return 1;
+  if (condicion === 'exento') return 4;
+  if (condicion === 'monotributo') return 6;
+  return 5; // consumidor_final por defecto
 }
 
 function extract(xml, tag) {
