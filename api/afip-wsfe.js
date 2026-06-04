@@ -3,7 +3,7 @@ const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
 
 const agent = new https.Agent({ rejectUnauthorized: false });
-const WSFE_URL = 'https://wswhomo.arca.gob.ar/wsfev1/service.asmx';
+const WSFE_URL = 'https://servicios1.arca.gob.ar/wsfev1/service.asmx';
 const WSAA_URL = 'https://wsaa.arca.gob.ar/ws/services/LoginCms';
 
 module.exports = async function handler(req, res) {
