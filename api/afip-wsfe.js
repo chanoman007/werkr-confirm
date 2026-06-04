@@ -38,7 +38,6 @@ module.exports = async function handler(req, res) {
     // Ultimo numero
     const ultimoNroSoap = buildSoapUltimoNro(cuitEmisor, token, sign, ptoVta, tipoComprobante);
     const ultimoNroText = await soapPost(WSFE_URL, ultimoNroSoap, 'FECompUltimoAutorizado');
-    console.log('UltimoNro response:', ultimoNroText);
     const ultimoNro = parseInt(extract(ultimoNroText, 'CbteNro')) || 0;
     const nroComprobante = ultimoNro + 1;
 
@@ -152,7 +151,7 @@ function toARCADate(d) {
 
 function buildSoapUltimoNro(cuit, token, sign, ptoVta, tipoCbte) {
   return '<?xml version="1.0" encoding="utf-8"?>' +
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">' +
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">' +
     '<soap:Body><FECompUltimoAutorizado xmlns="http://ar.gov.afip.dif.FEV1/">' +
     '<Auth><Token>' + token + '</Token><Sign>' + sign + '</Sign><Cuit>' + cuit + '</Cuit></Auth>' +
     '<PtoVta>' + ptoVta + '</PtoVta><CbteTipo>' + tipoCbte + '</CbteTipo>' +
@@ -161,7 +160,7 @@ function buildSoapUltimoNro(cuit, token, sign, ptoVta, tipoCbte) {
 
 function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, iva, total, cuitReceptor, concepto, receptor_condicion) {
   const ivaXml = tipoCbte !== 11
-    ? '<AlicIvas><AlicIva><Id>5</Id><BaseImp>' + neto + '</BaseImp><Importe>' + iva + '</Importe></AlicIva></AlicIvas>'
+    ? '<AlicIvas><AlicIva><Id>5</Id><BaseImp>' + neto.toFixed(2) + '</BaseImp><Importe>' + iva.toFixed(2) + '</Importe></AlicIva></AlicIvas>'
     : '<AlicIvas/>';
 
   return '<?xml version="1.0" encoding="utf-8"?>' +
@@ -174,6 +173,7 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
     '<Concepto>' + concepto + '</Concepto>' +
     '<DocTipo>' + (cuitReceptor !== '0' ? '80' : '99') + '</DocTipo>' +
     '<DocNro>' + cuitReceptor + '</DocNro>' +
+    '<CondicionIVAReceptorId>' + getCondicionIVA(receptor_condicion) + '</CondicionIVAReceptorId>' +
     '<CbteDesde>' + nro + '</CbteDesde>' +
     '<CbteHasta>' + nro + '</CbteHasta>' +
     '<CbteFch>' + fecha + '</CbteFch>' +
@@ -181,12 +181,11 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
     '<ImpTotConc>0</ImpTotConc>' +
     '<ImpNeto>' + neto + '</ImpNeto>' +
     '<ImpOpEx>0</ImpOpEx>' +
-    '<ImpTrib>0</ImpTrib>' +
     '<ImpIVA>' + iva + '</ImpIVA>' +
+    '<ImpTrib>0</ImpTrib>' +
     '<MonId>PES</MonId>' +
     '<MonCotiz>1</MonCotiz>' +
     ivaXml +
-    '<CondicionIVAReceptorId>' + getCondicionIVA(receptor_condicion) + '</CondicionIVAReceptorId>' +
     '</FECAEDetRequest></FeDetReq>' +
     '</FeCAEReq>' +
     '</FECAESolicitar></soap:Body></soap:Envelope>';
