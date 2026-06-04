@@ -38,6 +38,7 @@ module.exports = async function handler(req, res) {
     // Ultimo numero
     const ultimoNroSoap = buildSoapUltimoNro(cuitEmisor, token, sign, ptoVta, tipoComprobante);
     const ultimoNroText = await soapPost(WSFE_URL, ultimoNroSoap, 'FECompUltimoAutorizado');
+    console.log('UltimoNro response:', ultimoNroText);
     const ultimoNro = parseInt(extract(ultimoNroText, 'CbteNro')) || 0;
     const nroComprobante = ultimoNro + 1;
 
