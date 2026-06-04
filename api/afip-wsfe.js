@@ -43,9 +43,13 @@ module.exports = async function handler(req, res) {
 
     // Importes
     const fecha = getFechaHoy();
-    const importeNeto = parseFloat(importe);
-    const iva = tipoComprobante === 1 ? parseFloat((importeNeto * 0.21).toFixed(2)) : 0;
-    const importeTotal = tipoComprobante === 1 ? parseFloat((importeNeto + iva).toFixed(2)) : importeNeto;
+    const importeTotal = parseFloat(parseFloat(importe).toFixed(2));
+    const importeNeto = tipoComprobante === 11
+      ? importeTotal
+      : parseFloat((importeTotal / 1.21).toFixed(2));
+    const iva = tipoComprobante === 11
+      ? 0
+      : parseFloat((importeTotal - importeNeto).toFixed(2));
 
     // Emitir
     const emisorSoap = buildSoapEmitir(
@@ -154,7 +158,7 @@ function buildSoapUltimoNro(cuit, token, sign, ptoVta, tipoCbte) {
 }
 
 function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, iva, total, cuitReceptor, concepto, receptor_condicion) {
-  const ivaXml = tipoCbte === 1
+  const ivaXml = tipoCbte !== 11
     ? '<AlicIvas><AlicIva><Id>5</Id><BaseImp>' + neto + '</BaseImp><Importe>' + iva + '</Importe></AlicIva></AlicIvas>'
     : '<AlicIvas/>';
 
