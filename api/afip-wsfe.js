@@ -73,7 +73,10 @@ module.exports = async function handler(req, res) {
     const cae = extract(emisorText, 'CAE');
     const caeVto = extract(emisorText, 'CAEFchVto');
     const resultado = extract(emisorText, 'Resultado');
-    const errMsg = extract(emisorText, 'Msg');
+    const errores = emisorText.match(/<Err>[\s\S]*?<\/Err>/g) || [];
+    const errMsg = errores.length > 0
+      ? errores.map(e => extract(e, 'Msg')).join(', ')
+      : null;
 
     if (!cae || resultado !== 'A') throw new Error('WSFEv1 error: ' + (errMsg || emisorText));
 
