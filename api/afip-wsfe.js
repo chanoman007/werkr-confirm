@@ -94,6 +94,7 @@ module.exports = async function handler(req, res) {
       factura_numero: nroComprobante,
       factura_tipo: getTipoLetra(tipoComprobante),
       importe_total: importeTotal,
+      punto_venta: ptoVta,
     });
 
   } catch (e) {
