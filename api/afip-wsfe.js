@@ -30,7 +30,11 @@ module.exports = async function handler(req, res) {
 
     const ptoVta = empresa.afip_punto_venta;
     const cuitEmisor = empresa.afip_cuit;
-    const tipoComprobante = getTipoComprobante(empresa.afip_condicion, receptor.condicion);
+    const esNC = req.body.es_nota_credito === true;
+    const facturaOriginal = req.body.factura_original || null;
+    const tipoComprobante = esNC
+      ? getTipoNC(empresa.afip_condicion, receptor.condicion)
+      : getTipoComprobante(empresa.afip_condicion, receptor.condicion);
 
     // WSAA inline
     const { token, sign } = await getToken(empresa.afip_cert, empresa.afip_key);
@@ -52,10 +56,14 @@ module.exports = async function handler(req, res) {
       : parseFloat((importeTotal - importeNeto).toFixed(2));
 
     // Emitir
+    const cbtesAsoc = esNC && facturaOriginal
+      ? '<CbtesAsoc><CbteAsoc><Tipo>' + getTipoComprobante(empresa.afip_condicion, receptor.condicion) + '</Tipo><PtoVta>' + ptoVta + '</PtoVta><Nro>' + facturaOriginal.numero + '</Nro><Cuit>' + cuitEmisor + '</Cuit><CbteFch>' + (facturaOriginal.fecha || getFechaHoy()) + '</CbteFch></CbteAsoc></CbtesAsoc>'
+      : '';
+
     const emisorSoap = buildSoapEmitir(
       cuitEmisor, token, sign, ptoVta, tipoComprobante,
       nroComprobante, fecha, importeNeto, iva, importeTotal,
-      receptor.cuit || '0', concepto || 1, receptor.condicion
+      receptor.cuit || '0', concepto || 1, receptor.condicion, cbtesAsoc
     );
     console.log('SOAP enviado:', emisorSoap);
     const emisorText = await soapPost(WSFE_URL, emisorSoap, 'FECAESolicitar');
@@ -126,6 +134,12 @@ async function getToken(afip_cert, afip_key) {
   return { token, sign };
 }
 
+function getTipoNC(condicionEmisor, condicionReceptor) {
+  if (condicionEmisor === 'ri' && condicionReceptor === 'RI') return 3;  // NC A
+  if (condicionEmisor === 'ri') return 8;                                  // NC B
+  return 13;                                                               // NC C
+}
+
 function getTipoComprobante(condicionEmisor, condicionReceptor) {
   if (condicionEmisor === 'ri' && condicionReceptor === 'RI') return 1;
   if (condicionEmisor === 'ri') return 6;
@@ -135,6 +149,7 @@ function getTipoComprobante(condicionEmisor, condicionReceptor) {
 function getTipoLetra(tipo) {
   if (tipo === 1) return 'A';
   if (tipo === 6) return 'B';
+  if (tipo === 3 || tipo === 8 || tipo === 13) return 'NC';
   return 'C';
 }
 
@@ -158,7 +173,7 @@ function buildSoapUltimoNro(cuit, token, sign, ptoVta, tipoCbte) {
     '</FECompUltimoAutorizado></soap:Body></soap:Envelope>';
 }
 
-function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, iva, total, cuitReceptor, concepto, receptor_condicion) {
+function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, iva, total, cuitReceptor, concepto, receptor_condicion, cbtesAsoc) {
   const ivaXml = tipoCbte !== 11
     ? '<Iva><AlicIva><Id>5</Id><BaseImp>' + neto.toFixed(2) + '</BaseImp><Importe>' + iva.toFixed(2) + '</Importe></AlicIva></Iva>'
     : '';
