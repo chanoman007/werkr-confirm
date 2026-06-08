@@ -167,7 +167,9 @@
     `);
   };
 
-  const confirmar = async (id, estado, presupuesto) => {
+  const confirmar = async (estado) => {
+    const id = window._id;
+    const presupuesto = window._presupuesto;
     document.querySelectorAll('.btn').forEach(b => b.disabled = true);
     try {
       const ip    = await getIP();
@@ -236,6 +238,8 @@
         return d.toLocaleDateString('es-AR');
       })() : null;
 
+      window._presupuesto = p;
+      window._id = id;
       render(`
         <div class="logo"><div class="logo-icon">W</div><span class="logo-text">Werkr</span></div>
         <h2>Presupuesto para ${p.cliente_nombre || 'Cliente'}</h2>
@@ -257,8 +261,8 @@
         ${p.notas ? `<div class="seccion"><div class="seccion-titulo">Notas</div><div class="dato">${p.notas}</div></div>` : ''}
 
         <div class="botones">
-          <button class="btn btn-rechazar" onclick="confirmar('${id}', 'rechazado', ${JSON.stringify(p).replace(/</g,'&lt;')})">Rechazar</button>
-          <button class="btn btn-aceptar"  onclick="confirmar('${id}', 'aprobado', ${JSON.stringify(p).replace(/</g,'&lt;')})">Aceptar</button>
+          <button class="btn btn-rechazar" onclick="confirmar('rechazado')">Rechazar</button>
+          <button class="btn btn-aceptar"  onclick="confirmar('aprobado')">Aceptar</button>
         </div>
       `);
     } catch (e) {
