@@ -81,7 +81,13 @@
     }
     .resultado-icon { font-size: 64px; margin-bottom: 16px; }
     .resultado-titulo { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
-    .resultado-sub { font-size: 15px; color: #888; }
+    .resultado-sub { font-size: 15px; color: #888; margin-bottom: 16px; }
+    .firma-box {
+      background: #f0f4f8; border-radius: 10px;
+      padding: 14px; text-align: left; margin-top: 16px;
+    }
+    .firma-titulo { font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .firma-dato { font-size: 12px; color: #555; margin-bottom: 4px; word-break: break-all; }
     .loading { text-align: center; padding: 40px; color: #888; }
     .error { text-align: center; padding: 40px; color: #ff3b30; }
   </style>
@@ -102,7 +108,7 @@
     return parts[parts.length - 1];
   };
 
-  const supabase = async (method, path, body) => {
+  const supabaseCall = async (method, path, body) => {
     const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
       method,
       headers: {
@@ -117,9 +123,37 @@
     return method === 'PATCH' ? null : res.json();
   };
 
+  const getIP = async () => {
+    try {
+      const r = await fetch('https://api.ipify.org?format=json');
+      const d = await r.json();
+      return d.ip || 'desconocida';
+    } catch { return 'desconocida'; }
+  };
+
+  const hashPresupuesto = async (p) => {
+    const data = JSON.stringify({
+      id: p.id,
+      numero: p.numero_presupuesto,
+      cliente: p.cliente_nombre,
+      total: p.total,
+      items: p.items,
+    });
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(data));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  };
+
   const render = (html) => { document.getElementById('app').innerHTML = html; };
 
-  const mostrarResultado = (aceptado) => {
+  const mostrarResultado = (aceptado, firma) => {
+    const firmaHTML = firma ? `
+      <div class="firma-box">
+        <div class="firma-titulo">Registro de confirmacion</div>
+        <div class="firma-dato"><b>Fecha:</b> ${firma.fecha}</div>
+        <div class="firma-dato"><b>IP:</b> ${firma.ip}</div>
+        <div class="firma-dato"><b>Hash:</b> ${firma.hash}</div>
+      </div>` : '';
+
     render(`
       <div class="logo"><div class="logo-icon">W</div><span class="logo-text">Werkr</span></div>
       <div class="resultado">
@@ -127,18 +161,34 @@
         <div class="resultado-titulo" style="color:${aceptado ? '#34c759' : '#ff3b30'}">
           Presupuesto ${aceptado ? 'aceptado' : 'rechazado'}
         </div>
-        <div class="resultado-sub">Tu respuesta fue registrada. El técnico será notificado.</div>
+        <div class="resultado-sub">Tu respuesta fue registrada. El tecnico sera notificado.</div>
+        ${firmaHTML}
       </div>
     `);
   };
 
-  const confirmar = async (id, estado) => {
+  const confirmar = async (id, estado, presupuesto) => {
     document.querySelectorAll('.btn').forEach(b => b.disabled = true);
     try {
-      await supabase('PATCH', `presupuestos?id=eq.${id}`, { estado });
-      mostrarResultado(estado === 'aprobado');
+      const ip    = await getIP();
+      const hash  = await hashPresupuesto(presupuesto);
+      const fecha = new Date().toISOString();
+
+      await supabaseCall('PATCH', `presupuestos?id=eq.${id}`, {
+        estado,
+        confirmado_por_cliente: true,
+        fecha_confirmacion_cliente: fecha,
+        cliente_ip: ip,
+        cliente_hash: hash,
+      });
+
+      mostrarResultado(estado === 'aprobado', {
+        fecha: new Date(fecha).toLocaleString('es-AR'),
+        ip,
+        hash,
+      });
     } catch (e) {
-      alert('Error al registrar tu respuesta. Intentá de nuevo.');
+      alert('Error al registrar tu respuesta. Intenta de nuevo.');
       document.querySelectorAll('.btn').forEach(b => b.disabled = false);
     }
   };
@@ -146,18 +196,28 @@
   const init = async () => {
     const id = getId();
     if (!id || id === 'presupuesto') {
-      render('<div class="error">Link inválido.</div>');
+      render('<div class="error">Link invalido.</div>');
       return;
     }
 
     try {
-      const data = await supabase('GET', `presupuestos?id=eq.${id}&select=*`);
+      const data = await supabaseCall('GET', `presupuestos?id=eq.${id}&select=*`);
       if (!data?.length) { render('<div class="error">Presupuesto no encontrado.</div>'); return; }
 
       const p = data[0];
 
+      if (p.confirmado_por_cliente) {
+        const firma = p.fecha_confirmacion_cliente ? {
+          fecha: new Date(p.fecha_confirmacion_cliente).toLocaleString('es-AR'),
+          ip: p.cliente_ip || 'no registrada',
+          hash: p.cliente_hash || 'no disponible',
+        } : null;
+        mostrarResultado(p.estado === 'aprobado', firma);
+        return;
+      }
+
       if (p.estado === 'aprobado' || p.estado === 'rechazado') {
-        mostrarResultado(p.estado === 'aprobado');
+        mostrarResultado(p.estado === 'aprobado', null);
         return;
       }
 
@@ -181,7 +241,7 @@
         <h2>Presupuesto para ${p.cliente_nombre || 'Cliente'}</h2>
         <div class="numero">N° ${String(p.numero_presupuesto).padStart(4,'0')}</div>
 
-        ${p.cliente_direccion ? `<div class="seccion"><div class="seccion-titulo">Dirección</div><div class="dato">${p.cliente_direccion}</div></div>` : ''}
+        ${p.cliente_direccion ? `<div class="seccion"><div class="seccion-titulo">Direccion</div><div class="dato">${p.cliente_direccion}</div></div>` : ''}
 
         <div class="seccion">
           <div class="seccion-titulo">Detalle</div>
@@ -193,13 +253,12 @@
           <span class="total-valor">${fmt(p.total)}</span>
         </div>
 
-        ${vence ? `<div class="vigencia">⏱ Este presupuesto vence el <strong>${vence}</strong></div>` : ''}
-
+        ${vence ? `<div class="vigencia">Vigencia hasta: <strong>${vence}</strong></div>` : ''}
         ${p.notas ? `<div class="seccion"><div class="seccion-titulo">Notas</div><div class="dato">${p.notas}</div></div>` : ''}
 
         <div class="botones">
-          <button class="btn btn-rechazar" onclick="confirmar('${id}', 'rechazado')">❌ Rechazar</button>
-          <button class="btn btn-aceptar"  onclick="confirmar('${id}', 'aprobado')">✅ Aceptar</button>
+          <button class="btn btn-rechazar" onclick="confirmar('${id}', 'rechazado', ${JSON.stringify(p).replace(/</g,'&lt;')})">Rechazar</button>
+          <button class="btn btn-aceptar"  onclick="confirmar('${id}', 'aprobado', ${JSON.stringify(p).replace(/</g,'&lt;')})">Aceptar</button>
         </div>
       `);
     } catch (e) {
