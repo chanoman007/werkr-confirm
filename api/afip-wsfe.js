@@ -197,7 +197,7 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
     '<Concepto>' + concepto + '</Concepto>' +
     '<DocTipo>' + (cuitReceptor !== '0' ? '80' : '99') + '</DocTipo>' +
     '<DocNro>' + cuitReceptor + '</DocNro>' +
-    '<CondicionIVAReceptorId>' + getCondicionIVA(receptor_condicion) + '</CondicionIVAReceptorId>' +
+    '<CondicionIVAReceptorId>' + getCondicionIVA(receptor_condicion, tipoCbte) + '</CondicionIVAReceptorId>' +
     '<CbteDesde>' + nro + '</CbteDesde>' +
     '<CbteHasta>' + nro + '</CbteHasta>' +
     '<CbteFch>' + fecha + '</CbteFch>' +
@@ -241,7 +241,9 @@ function soapPost(url, body, action) {
   });
 }
 
-function getCondicionIVA(condicion) {
+function getCondicionIVA(condicion, tipoCbte) {
+  // Para Factura/NC B (tipo 6 u 8), monotributo no es valido -> consumidor_final
+  if ((tipoCbte === 6 || tipoCbte === 8) && condicion === 'monotributo') return 5;
   if (condicion === 'RI') return 1;
   if (condicion === 'exento') return 4;
   if (condicion === 'monotributo') return 6;
