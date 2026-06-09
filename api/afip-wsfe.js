@@ -210,6 +210,7 @@ function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, 
     '<MonId>PES</MonId>' +
     '<MonCotiz>1</MonCotiz>' +
     ivaXml +
+    (cbtesAsoc || '') +
     '</FECAEDetRequest></FeDetReq>' +
     '</FeCAEReq>' +
     '</FECAESolicitar></soap:Body></soap:Envelope>';
