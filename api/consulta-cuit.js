@@ -1,6 +1,15 @@
+const forge = require('node-forge');
 const https = require('https');
+const { createClient } = require('@supabase/supabase-js');
 
-const agent = new https.Agent({ rejectUnauthorized: false });
+const agent = new https.Agent({
+  rejectUnauthorized: false,
+  ciphers: 'DEFAULT:@SECLEVEL=0',
+  secureOptions: require('crypto').constants.SSL_OP_LEGACY_SERVER_CONNECT,
+});
+
+const WSAA_URL    = 'https://wsaa.arca.gob.ar/ws/services/LoginCms';
+const PADRON_URL  = 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -9,55 +18,131 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   try {
-    const { cuit } = req.body;
-    if (!cuit || cuit.length !== 11) return res.status(400).json({ error: 'CUIT inválido' });
+    const { cuit, empresa_id } = req.body;
+    if (!cuit || cuit.replace(/\D/g,'').length < 11) {
+      return res.status(400).json({ error: 'CUIT invalido' });
+    }
+    const cuitLimpio = cuit.replace(/\D/g,'');
 
-    // Intentar scraping de CUITONLINE
-    const html = await fetchUrl(`https://www.cuitonline.com/search.php?q=${cuit}`, agent);
+    // Obtener cert y key de la empresa
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_KEY
+    );
+    const { data: empresa } = await supabase
+      .from('empresas')
+      .select('afip_cuit, afip_cert, afip_key')
+      .eq('id', empresa_id)
+      .single();
 
-    // Extraer razón social
-    const razonMatch = html.match(/class="denominacion[^"]*"[^>]*>([^<]+)</i);
-    const razonSocial = razonMatch ? razonMatch[1].trim() : null;
+    if (!empresa?.afip_cert || !empresa?.afip_key) {
+      return res.status(400).json({ error: 'Empresa sin certificados AFIP configurados' });
+    }
 
-    // Extraer domicilio
-    const domicilioMatch = html.match(/Domicilio[^:]*:\s*<[^>]+>([^<]+)</i);
-    const domicilio = domicilioMatch ? domicilioMatch[1].trim() : null;
+    // Obtener token WSAA para ws_sr_constancia_inscripcion
+    const { token, sign } = await getToken(empresa.afip_cert, empresa.afip_key, 'ws_sr_constancia_inscripcion');
 
-    // Extraer condición IVA
+    // Consultar padrón
+    const soapBody = '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:per="http://a5.soap.ws.server.puc.sr/">' +
+      '<soapenv:Header/><soapenv:Body>' +
+      '<per:getPersona>' +
+      '<token>' + token + '</token>' +
+      '<sign>' + sign + '</sign>' +
+      '<cuitRepresentada>' + empresa.afip_cuit + '</cuitRepresentada>' +
+      '<idPersona>' + cuitLimpio + '</idPersona>' +
+      '</per:getPersona>' +
+      '</soapenv:Body></soapenv:Envelope>';
+
+    const respText = await soapPost(PADRON_URL, soapBody, 'getPersona');
+
+    // Parsear respuesta
+    const razonSocialMatch = respText.match(/<razonSocial>([^<]+)<\/razonSocial>/) ||
+                             respText.match(/<apellido>([^<]+)<\/apellido>/);
+    const nombreMatch      = respText.match(/<nombre>([^<]+)<\/nombre>/);
+    const calleMatch       = respText.match(/<direccion>([^<]+)<\/direccion>/) ||
+                             respText.match(/<calle>([^<]+)<\/calle>/);
+    const localidadMatch   = respText.match(/<localidad>([^<]+)<\/localidad>/);
+    const condMatch        = respText.match(/<descripcionCategoria>([^<]+)<\/descripcionCategoria>/) ||
+                             respText.match(/<tipoPersona>([^<]+)<\/tipoPersona>/);
+
+    let razonSocial = razonSocialMatch?.[1] || '';
+    if (nombreMatch?.[1]) razonSocial = (razonSocial + ' ' + nombreMatch[1]).trim();
+
+    const domicilio = [calleMatch?.[1], localidadMatch?.[1]].filter(Boolean).join(', ');
+
     let condicionIva = 'consumidor_final';
-    if (html.match(/responsable inscripto/i)) condicionIva = 'RI';
-    else if (html.match(/monotributo/i)) condicionIva = 'monotributo';
-    else if (html.match(/exento/i)) condicionIva = 'exento';
+    const condStr = (condMatch?.[1] || '').toLowerCase();
+    if (condStr.includes('inscripto') || condStr.includes('responsable')) condicionIva = 'RI';
+    else if (condStr.includes('monotributo') || condStr.includes('pequeño')) condicionIva = 'monotributo';
+    else if (condStr.includes('exento')) condicionIva = 'exento';
 
     if (!razonSocial) {
-      return res.status(404).json({ error: 'CUIT no encontrado. Ingresá los datos manualmente.' });
+      return res.status(404).json({ error: 'CUIT no encontrado en ARCA' });
     }
 
     return res.status(200).json({ razon_social: razonSocial, domicilio, condicion_iva: condicionIva });
 
   } catch (e) {
-    return res.status(500).json({ error: 'No se pudo consultar. Ingresá los datos manualmente.' });
+    console.log('ERROR consulta-cuit:', e.message);
+    return res.status(500).json({ error: 'No se pudo consultar. Ingresa los datos manualmente.' });
   }
 };
 
-function fetchUrl(url, agent) {
-  return new Promise((resolve, reject) => {
+async function getToken(afip_cert, afip_key, servicio) {
+  const now  = new Date();
+  const from = toARCADate(new Date(now.getTime() - 60000));
+  const to   = toARCADate(new Date(now.getTime() + 43200000));
+  const uid  = Math.floor(now.getTime() / 1000);
+
+  const tra = '<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>' + uid + '</uniqueId><generationTime>' + from + '</generationTime><expirationTime>' + to + '</expirationTime></header><service>' + servicio + '</service></loginTicketRequest>';
+
+  const cert       = forge.pki.certificateFromPem(afip_cert);
+  const privateKey = forge.pki.privateKeyFromPem(afip_key);
+  const p7 = forge.pkcs7.createSignedData();
+  p7.content = forge.util.createBuffer(tra, 'utf8');
+  p7.addCertificate(cert);
+  p7.addSigner({ key: privateKey, certificate: cert, digestAlgorithm: forge.pki.oids.sha256, authenticatedAttributes: [] });
+  p7.sign({ detached: false });
+  const cms = forge.util.encode64(forge.asn1.toDer(p7.toAsn1()).getBytes());
+
+  const wsaaSoap = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov.ar"><soapenv:Header/><soapenv:Body><wsaa:loginCms><wsaa:in0>' + cms + '</wsaa:in0></wsaa:loginCms></soapenv:Body></soapenv:Envelope>';
+
+  const wsaaText = await soapPost(WSAA_URL, wsaaSoap, '');
+  const decoded = wsaaText.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+  const token = extract(decoded, 'token');
+  const sign  = extract(decoded, 'sign');
+  if (!token || !sign) throw new Error('WSAA error');
+  return { token, sign };
+}
+
+function soapPost(url, body, action) {
+  return new Promise(function(resolve, reject) {
     const u = new URL(url);
     const req = https.request({
-      hostname: u.hostname,
-      path: u.pathname + u.search,
-      method: 'GET',
-      agent,
+      hostname: u.hostname, path: u.pathname, method: 'POST', agent,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html',
-      },
-    }, (resp) => {
-      let data = '';
-      resp.on('data', c => data += c);
-      resp.on('end', () => resolve(data));
+        'Content-Type': 'text/xml; charset=utf-8',
+        'SOAPAction': action || '',
+        'Content-Length': Buffer.byteLength(body),
+      }
+    }, function(res) {
+      let d = '';
+      res.on('data', function(c) { d += c; });
+      res.on('end', function() { resolve(d); });
     });
     req.on('error', reject);
+    req.write(body);
     req.end();
   });
+}
+
+function toARCADate(d) {
+  const p = function(n) { return String(n).padStart(2,'0'); };
+  return d.getUTCFullYear() + '-' + p(d.getUTCMonth()+1) + '-' + p(d.getUTCDate()) + 'T' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds()) + '-00:00';
+}
+
+function extract(xml, tag) {
+  const m = xml.match(new RegExp('<' + tag + '>([\\s\\S]*?)<\\/' + tag + '>'));
+  return m ? m[1].trim() : '';
 }
