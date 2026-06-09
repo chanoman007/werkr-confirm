@@ -56,8 +56,13 @@ module.exports = async function handler(req, res) {
       : parseFloat((importeTotal - importeNeto).toFixed(2));
 
     // Emitir
+    // Para NC la fecha de la factura original tiene que ser aaaammdd
+    const fechaFactOrig = facturaOriginal?.fecha
+      ? String(facturaOriginal.fecha).replace(/-/g, '').substring(0, 8)
+      : getFechaHoy();
+
     const cbtesAsoc = esNC && facturaOriginal
-      ? '<CbtesAsoc><CbteAsoc><Tipo>' + getTipoComprobante(empresa.afip_condicion, receptor.condicion) + '</Tipo><PtoVta>' + ptoVta + '</PtoVta><Nro>' + facturaOriginal.numero + '</Nro><Cuit>' + cuitEmisor + '</Cuit><CbteFch>' + (facturaOriginal.fecha || getFechaHoy()) + '</CbteFch></CbteAsoc></CbtesAsoc>'
+      ? '<CbtesAsoc><CbteAsoc><Tipo>' + getTipoComprobante(empresa.afip_condicion, receptor.condicion) + '</Tipo><PtoVta>' + ptoVta + '</PtoVta><Nro>' + facturaOriginal.numero + '</Nro><Cuit>' + cuitEmisor + '</Cuit><CbteFch>' + fechaFactOrig + '</CbteFch></CbteAsoc></CbtesAsoc>'
       : '';
 
     const emisorSoap = buildSoapEmitir(
