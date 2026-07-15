@@ -1,10 +1,10 @@
 {
   "version": 2,
   "regions": ["gru1"],
+  "outputDirectory": "public",
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/presupuesto/(.*)", "dest": "/index.html" },
-    { "src": "/privacidad.html", "dest": "/privacidad.html" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    { "src": "/(.*)", "dest": "/$1" }
   ]
 }
