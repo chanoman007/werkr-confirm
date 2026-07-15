@@ -1,5 +1,10 @@
 {
-  "rewrites": [
-    { "source": "/presupuesto/:id", "destination": "/index.html" }
+  "version": 2,
+  "regions": ["gru1"],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/presupuesto/(.*)", "dest": "/index.html" },
+    { "src": "/privacidad.html", "dest": "/privacidad.html" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
