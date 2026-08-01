@@ -11,6 +11,15 @@ const agent = new https.Agent({
 const WSAA_URL    = 'https://wsaa.arca.gob.ar/ws/services/LoginCms';
 const PADRON_URL  = 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5';
 
+function decodeEntities(str) {
+  return (str || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'content-type');
@@ -63,19 +72,29 @@ module.exports = async function handler(req, res) {
     const calleMatch       = respText.match(/<direccion>([^<]+)<\/direccion>/) ||
                              respText.match(/<calle>([^<]+)<\/calle>/);
     const localidadMatch   = respText.match(/<localidad>([^<]+)<\/localidad>/);
-    const condMatch        = respText.match(/<descripcionCategoria>([^<]+)<\/descripcionCategoria>/) ||
-                             respText.match(/<tipoPersona>([^<]+)<\/tipoPersona>/);
+    let razonSocial = decodeEntities(razonSocialMatch?.[1] || '');
+    if (nombreMatch?.[1]) razonSocial = (razonSocial + ' ' + decodeEntities(nombreMatch[1])).trim();
 
-    let razonSocial = razonSocialMatch?.[1] || '';
-    if (nombreMatch?.[1]) razonSocial = (razonSocial + ' ' + nombreMatch[1]).trim();
+    const domicilio = decodeEntities([calleMatch?.[1], localidadMatch?.[1]].filter(Boolean).join(', '));
 
-    const domicilio = [calleMatch?.[1], localidadMatch?.[1]].filter(Boolean).join(', ');
+    // La condición frente al IVA no viene en un campo único: hay que inferirla de los
+    // impuestos/regímenes en los que la persona está inscripta (datosRegimenGeneral / datosMonotributo).
+    // El nodo <datosMonotributo> puede venir presente pero vacío para quien no está adherido,
+    // por eso se exige que tenga contenido adentro (no solo que exista la etiqueta).
+    const monotributoMatch = respText.match(/<datosMonotributo>([\s\S]*?)<\/datosMonotributo>/);
+    const tieneMonotributo = !!(monotributoMatch && monotributoMatch[1].trim().length > 0);
+    const impuestosIds = Array.from(respText.matchAll(/<idImpuesto>(\d+)<\/idImpuesto>/g)).map((m) => m[1]);
+    const descripcionesImpuesto = Array.from(respText.matchAll(/<descripcionImpuesto>([^<]+)<\/descripcionImpuesto>/g))
+      .map((m) => m[1].toLowerCase());
 
     let condicionIva = 'consumidor_final';
-    const condStr = (condMatch?.[1] || '').toLowerCase();
-    if (condStr.includes('inscripto') || condStr.includes('responsable')) condicionIva = 'RI';
-    else if (condStr.includes('monotributo') || condStr.includes('pequeño')) condicionIva = 'monotributo';
-    else if (condStr.includes('exento')) condicionIva = 'exento';
+    if (tieneMonotributo) {
+      condicionIva = 'monotributo';
+    } else if (impuestosIds.includes('32') || descripcionesImpuesto.some((d) => d.includes('exento'))) {
+      condicionIva = 'exento';
+    } else if (impuestosIds.includes('30') || descripcionesImpuesto.some((d) => d.includes('iva'))) {
+      condicionIva = 'RI';
+    }
 
     if (!razonSocial) {
       return res.status(404).json({ error: 'CUIT no encontrado en ARCA' });
