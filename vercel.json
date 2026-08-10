@@ -5,6 +5,7 @@
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/presupuesto/(.*)", "dest": "/index.html" },
+    { "src": "/resena/(.*)", "dest": "/resena.html" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
