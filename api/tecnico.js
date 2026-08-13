@@ -1,5 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
-const RESERVED_SLUGS = require('../../lib/reservedSlugs');
+const RESERVED_SLUGS = require('../lib/reservedSlugs');
 
 function escapeHtml(str) {
   return String(str || '').replace(/[&<>"']/g, (c) => ({
