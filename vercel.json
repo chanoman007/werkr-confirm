@@ -15,7 +15,7 @@
     {
       "src": "/([^/.]+)",
       "has": [{ "type": "host", "value": "tecnicos.werkrweb.com.ar" }],
-      "dest": "/api/tecnico/$1"
+      "dest": "/api/tecnico?slug=$1"
     },
     { "src": "/(.*)", "dest": "/$1" }
   ]
