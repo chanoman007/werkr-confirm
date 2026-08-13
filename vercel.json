@@ -6,6 +6,17 @@
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/presupuesto/(.*)", "dest": "/index.html" },
     { "src": "/resena/(.*)", "dest": "/resena.html" },
+    {
+      "src": "/",
+      "has": [{ "type": "host", "value": "tecnicos.werkrweb.com.ar" }],
+      "dest": "https://werkrweb.com.ar",
+      "status": 301
+    },
+    {
+      "src": "/([^/.]+)",
+      "has": [{ "type": "host", "value": "tecnicos.werkrweb.com.ar" }],
+      "dest": "/api/tecnico/$1"
+    },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
