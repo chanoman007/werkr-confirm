@@ -156,6 +156,26 @@ ${empresa.foto_url ? `<meta property="og:image" content="${escapeHtml(empresa.fo
   .resena-estrellas { color: #ffb400; font-size: 13px; }
   .resena-comentario { font-size: 13px; color: #666; }
   .sin-resenas { text-align: center; color: #999; font-size: 13px; padding: 12px 0; }
+  .form-solicitud { border-top: 1px solid #eee; padding-top: 20px; margin-top: 24px; }
+  .form-solicitud h2 { font-size: 16px; color: #1a1a2e; margin-bottom: 4px; }
+  .form-solicitud .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
+  .form-solicitud label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; margin-top: 14px; }
+  .form-solicitud input[type="text"],
+  .form-solicitud input[type="tel"],
+  .form-solicitud textarea {
+    width: 100%; border: 1px solid #ddd; border-radius: 10px;
+    padding: 12px; font-size: 15px; background: #fafafa; font-family: inherit;
+  }
+  .form-solicitud textarea { min-height: 90px; resize: vertical; }
+  .btn-solicitud {
+    width: 100%; padding: 14px; border-radius: 12px; border: none;
+    font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 20px;
+    background: #0066cc; color: #fff;
+  }
+  .btn-solicitud:disabled { opacity: 0.5; cursor: not-allowed; }
+  .form-mensaje { font-size: 13px; margin-top: 12px; text-align: center; }
+  .form-mensaje.error { color: #ff3b30; }
+  .form-mensaje.ok { color: #1a8a3d; font-size: 14px; font-weight: 600; padding: 8px 0; }
 </style>
 </head>
 <body>
@@ -180,7 +200,68 @@ ${empresa.foto_url ? `<meta property="og:image" content="${escapeHtml(empresa.fo
       </div>
     `).join('') : '<div class="sin-resenas">Todavía no hay reseñas.</div>'}
   </div>
+  <form class="form-solicitud" id="form-solicitud">
+    <input type="hidden" name="slug" value="${escapeHtml(slug)}">
+    <h2>Pedí un presupuesto</h2>
+    <div class="sub">Contanos qué necesitás y te contactamos.</div>
+    <label>Nombre</label>
+    <input type="text" name="nombre" required maxlength="100" placeholder="Tu nombre">
+    <label>Teléfono</label>
+    <input type="tel" name="telefono" required maxlength="30" placeholder="Tu teléfono">
+    <label>Dirección (opcional)</label>
+    <input type="text" name="direccion" maxlength="200" placeholder="Dirección">
+    <label>Contanos el trabajo</label>
+    <textarea name="descripcion_trabajo" required minlength="15" placeholder="Describí brevemente qué necesitás (mínimo 15 caracteres)"></textarea>
+    <button type="submit" class="btn-solicitud" id="btn-solicitud">Enviar solicitud</button>
+    <p class="form-mensaje" id="form-mensaje" hidden></p>
+  </form>
 </div>
+<script>
+  document.getElementById('form-solicitud').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var form = e.target;
+    var btn = document.getElementById('btn-solicitud');
+    var mensaje = document.getElementById('form-mensaje');
+    mensaje.hidden = true;
+
+    var body = {
+      slug: form.slug.value,
+      nombre: form.nombre.value.trim(),
+      telefono: form.telefono.value.trim(),
+      direccion: form.direccion.value.trim(),
+      descripcion_trabajo: form.descripcion_trabajo.value.trim(),
+    };
+
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+
+    try {
+      var res = await fetch('/api/solicitud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      var data = await res.json().catch(function () { return {}; });
+
+      if (!res.ok) {
+        mensaje.textContent = data.error || 'No se pudo enviar. Intentá de nuevo.';
+        mensaje.className = 'form-mensaje error';
+        mensaje.hidden = false;
+        btn.disabled = false;
+        btn.textContent = 'Enviar solicitud';
+        return;
+      }
+
+      form.innerHTML = '<p class="form-mensaje ok">¡Listo! Te vamos a contactar a la brevedad.</p>';
+    } catch (err) {
+      mensaje.textContent = 'No se pudo enviar. Intentá de nuevo.';
+      mensaje.className = 'form-mensaje error';
+      mensaje.hidden = false;
+      btn.disabled = false;
+      btn.textContent = 'Enviar solicitud';
+    }
+  });
+</script>
 </body>
 </html>`;
 
