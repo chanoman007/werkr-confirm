@@ -7,6 +7,12 @@ function escapeHtml(str) {
   }[c]));
 }
 
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+function formatMesAnio(iso) {
+  const d = new Date(iso);
+  return `${MESES_CORTOS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 // 404 real (no 200 con mensaje de error) para que Google no indexe esto
 // como contenido válido, y el mismo resultado tanto si el slug nunca
 // existió como si la empresa desactivó su página — no hay forma de
@@ -113,62 +119,86 @@ ${empresa.foto_url ? `<meta property="og:image" content="${escapeHtml(empresa.fo
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #f0f4f8; min-height: 100vh; padding: 20px;
+    background: #fff; color: #1a1a2e; min-height: 100vh;
+  }
+  .site-header {
+    background: #0a0f1e; padding: 14px 20px;
     display: flex; justify-content: center;
   }
-  .card {
-    background: #fff; border-radius: 16px; padding: 32px 24px;
-    max-width: 480px; width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  .site-header img { display: block; height: 36px; width: auto; }
+
+  .page {
+    max-width: 880px; margin: 0 auto; padding: 28px 20px 40px;
+    display: grid; gap: 24px; grid-template-columns: 1fr;
+    grid-template-areas:
+      "profile"
+      "bio"
+      "rating"
+      "whatsapp"
+      "resenas"
+      "form";
   }
-  .foto {
-    width: 88px; height: 88px; border-radius: 50%; object-fit: cover;
-    display: block; margin: 0 auto 16px;
+  @media (min-width: 769px) {
+    .page {
+      grid-template-columns: 1fr 320px;
+      column-gap: 40px;
+      grid-template-areas:
+        "profile whatsapp"
+        "bio     form"
+        "rating  form"
+        "resenas form";
+      align-items: start;
+    }
   }
-  .logo-icon {
-    width: 88px; height: 88px; background: #0066cc; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff; font-size: 40px; font-weight: 900; margin: 0 auto 16px;
+
+  .profile { grid-area: profile; display: flex; gap: 16px; align-items: flex-start; }
+  .avatar {
+    width: 72px; height: 72px; border-radius: 8px; flex-shrink: 0; overflow: hidden;
+    background: #eef1f6; display: flex; align-items: center; justify-content: center;
   }
-  h1 { font-size: 22px; color: #1a1a2e; text-align: center; margin-bottom: 8px; }
-  .especialidades {
-    display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 12px;
-  }
-  .tag {
-    background: #eaf2ff; color: #0066cc; font-size: 12px; font-weight: 700;
-    padding: 5px 10px; border-radius: 20px;
-  }
-  .zona { text-align: center; color: #666; font-size: 13px; margin-bottom: 16px; }
-  .bio { text-align: center; color: #444; font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
-  .rating {
-    text-align: center; font-size: 15px; font-weight: 700; color: #1a1a2e;
-    margin-bottom: 24px;
-  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .avatar svg { width: 32px; height: 32px; color: #a7b0bd; }
+  .profile-info h1 { font-size: 22px; line-height: 1.3; margin-bottom: 6px; text-wrap: balance; }
+  .profile-meta { font-size: 14px; color: #6b7280; margin-bottom: 4px; }
+  .profile-zona { font-size: 13px; color: #6b7280; }
+
+  .bio { grid-area: bio; font-size: 14px; color: #3d4450; line-height: 1.6; }
+
+  .rating { grid-area: rating; font-size: 14px; font-weight: 700; color: #1a1a2e; }
+
   .btn-whatsapp {
-    display: block; text-align: center; background: #25d366; color: #fff;
-    text-decoration: none; padding: 14px; border-radius: 12px; font-weight: 700;
-    font-size: 15px; margin-bottom: 24px;
+    grid-area: whatsapp;
+    display: flex; align-items: center; justify-content: center;
+    height: 44px; background: #0066cc; color: #fff; text-decoration: none;
+    border-radius: 10px; font-weight: 700; font-size: 15px;
   }
-  .resenas { border-top: 1px solid #eee; padding-top: 16px; }
-  .resena { padding: 12px 0; border-bottom: 1px solid #f2f2f2; }
+
+  .resenas { grid-area: resenas; border-top: 1px solid #e5e9ef; padding-top: 16px; }
+  .resena { padding: 14px 0; border-bottom: 1px solid #eef1f5; }
   .resena:last-child { border-bottom: none; }
-  .resena-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .resena-header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
   .resena-nombre { font-size: 13px; font-weight: 700; color: #1a1a2e; }
-  .resena-estrellas { color: #ffb400; font-size: 13px; }
-  .resena-comentario { font-size: 13px; color: #666; }
-  .sin-resenas { text-align: center; color: #999; font-size: 13px; padding: 12px 0; }
-  .form-solicitud { border-top: 1px solid #eee; padding-top: 20px; margin-top: 24px; }
+  .resena-meta { font-size: 12px; color: #8b93a1; white-space: nowrap; }
+  .resena-estrellas { display: block; color: #ffb400; font-size: 12px; margin-bottom: 4px; }
+  .resena-comentario { font-size: 13px; color: #4a5160; line-height: 1.5; }
+  .sin-resenas { color: #9aa1ac; font-size: 13px; }
+
+  .form-solicitud {
+    grid-area: form; background: #f5f7fa; border: 1px solid #e5e9ef;
+    border-radius: 14px; padding: 20px; align-self: start;
+  }
   .form-solicitud h2 { font-size: 16px; color: #1a1a2e; margin-bottom: 4px; }
-  .form-solicitud .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
-  .form-solicitud label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; margin-top: 14px; }
+  .form-solicitud .sub { color: #6b7280; font-size: 13px; margin-bottom: 16px; }
+  .form-solicitud label { display: block; font-size: 13px; color: #4a5160; margin-bottom: 6px; margin-top: 14px; }
   .form-solicitud input[type="text"],
   .form-solicitud input[type="tel"],
   .form-solicitud textarea {
     width: 100%; border: 1px solid #ddd; border-radius: 10px;
-    padding: 12px; font-size: 15px; background: #fafafa; font-family: inherit;
+    padding: 12px; font-size: 15px; background: #fff; font-family: inherit;
   }
   .form-solicitud textarea { min-height: 90px; resize: vertical; }
   .btn-solicitud {
-    width: 100%; padding: 14px; border-radius: 12px; border: none;
+    width: 100%; height: 44px; border-radius: 10px; border: none;
     font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 20px;
     background: #0066cc; color: #fff;
   }
@@ -176,16 +206,28 @@ ${empresa.foto_url ? `<meta property="og:image" content="${escapeHtml(empresa.fo
   .form-mensaje { font-size: 13px; margin-top: 12px; text-align: center; }
   .form-mensaje.error { color: #ff3b30; }
   .form-mensaje.ok { color: #1a8a3d; font-size: 14px; font-weight: 600; padding: 8px 0; }
+
+  .site-footer { text-align: center; font-size: 12px; color: #8b93a1; padding: 8px 20px 32px; }
+  .site-footer .brand { color: #0066cc; font-weight: 700; }
 </style>
 </head>
 <body>
-<div class="card">
-  ${empresa.foto_url
-    ? `<img class="foto" src="${escapeHtml(empresa.foto_url)}" alt="${nombre}">`
-    : `<div class="logo-icon">${nombre.charAt(0).toUpperCase()}</div>`}
-  <h1>${nombre}</h1>
-  ${especialidades.length ? `<div class="especialidades">${especialidades.map((e) => `<span class="tag">${e}</span>`).join('')}</div>` : ''}
-  ${empresa.zona_cobertura ? `<div class="zona">📍 ${escapeHtml(empresa.zona_cobertura)}</div>` : ''}
+<header class="site-header">
+  <img src="/werkr_logo.svg" alt="Werkr">
+</header>
+<main class="page">
+  <div class="profile">
+    <div class="avatar">
+      ${empresa.foto_url
+        ? `<img src="${escapeHtml(empresa.foto_url)}" alt="${nombre}">`
+        : `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 20c0-4.418 3.582-7 8-7s8 2.582 8 7" fill="currentColor"/></svg>`}
+    </div>
+    <div class="profile-info">
+      <h1>${nombre}</h1>
+      ${especialidades.length ? `<div class="profile-meta">${especialidades.join(' · ')}</div>` : ''}
+      ${empresa.zona_cobertura ? `<div class="profile-zona">📍 ${escapeHtml(empresa.zona_cobertura)}</div>` : ''}
+    </div>
+  </div>
   ${empresa.bio ? `<p class="bio">${escapeHtml(empresa.bio)}</p>` : ''}
   ${promedio ? `<div class="rating">⭐ ${promedio} · ${resenas.length} reseña${resenas.length === 1 ? '' : 's'}</div>` : ''}
   ${empresa.telefono_publico ? `<a class="btn-whatsapp" href="https://wa.me/54${escapeHtml(empresa.telefono_publico).replace(/\D/g, '')}">💬 Contactar por WhatsApp</a>` : ''}
@@ -194,8 +236,9 @@ ${empresa.foto_url ? `<meta property="og:image" content="${escapeHtml(empresa.fo
       <div class="resena">
         <div class="resena-header">
           <span class="resena-nombre">${escapeHtml(r.cliente_nombre || 'Cliente')}</span>
-          <span class="resena-estrellas">${'★'.repeat(r.puntaje)}${'☆'.repeat(5 - r.puntaje)}</span>
+          <span class="resena-meta">${formatMesAnio(r.created_at)}</span>
         </div>
+        <span class="resena-estrellas">${'★'.repeat(r.puntaje)}${'☆'.repeat(5 - r.puntaje)}</span>
         ${r.comentario ? `<p class="resena-comentario">${escapeHtml(r.comentario)}</p>` : ''}
       </div>
     `).join('') : '<div class="sin-resenas">Todavía no hay reseñas.</div>'}
@@ -215,7 +258,8 @@ ${empresa.foto_url ? `<meta property="og:image" content="${escapeHtml(empresa.fo
     <button type="submit" class="btn-solicitud" id="btn-solicitud">Enviar solicitud</button>
     <p class="form-mensaje" id="form-mensaje" hidden></p>
   </form>
-</div>
+</main>
+<footer class="site-footer">Perfil gestionado con <span class="brand">Werkr</span></footer>
 <script>
   document.getElementById('form-solicitud').addEventListener('submit', async function (e) {
     e.preventDefault();
