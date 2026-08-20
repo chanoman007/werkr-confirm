@@ -48,10 +48,10 @@ module.exports = async function handler(req, res) {
     // Importes
     const fecha = getFechaHoy();
     const importeTotal = parseFloat(parseFloat(importe).toFixed(2));
-    const importeNeto = tipoComprobante === 11
+    const importeNeto = tipoComprobante === 11 || tipoComprobante === 13
       ? importeTotal
       : parseFloat((importeTotal / 1.21).toFixed(2));
-    const iva = tipoComprobante === 11
+    const iva = tipoComprobante === 11 || tipoComprobante === 13
       ? 0
       : parseFloat((importeTotal - importeNeto).toFixed(2));
 
@@ -183,7 +183,7 @@ function buildSoapUltimoNro(cuit, token, sign, ptoVta, tipoCbte) {
 }
 
 function buildSoapEmitir(cuit, token, sign, ptoVta, tipoCbte, nro, fecha, neto, iva, total, cuitReceptor, concepto, receptor_condicion, cbtesAsoc) {
-  const ivaXml = tipoCbte !== 11
+  const ivaXml = tipoCbte !== 11 && tipoCbte !== 13
     ? '<Iva><AlicIva><Id>5</Id><BaseImp>' + neto.toFixed(2) + '</BaseImp><Importe>' + iva.toFixed(2) + '</Importe></AlicIva></Iva>'
     : '';
 
