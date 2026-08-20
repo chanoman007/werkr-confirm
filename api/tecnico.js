@@ -90,7 +90,7 @@ module.exports = async function handler(req, res) {
 
   const { data: resenasData } = await supabase
     .from('resenas')
-    .select('cliente_nombre, puntaje, comentario, created_at')
+    .select('cliente_nombre, puntaje, comentario, descripcion_publica, created_at')
     .eq('empresa_id', empresa.id)
     .eq('completada', true)
     .order('created_at', { ascending: false });
@@ -181,6 +181,7 @@ ${empresa.foto_url ? `<meta property="og:image" content="${escapeHtml(empresa.fo
   .resena-meta { font-size: 12px; color: #8b93a1; white-space: nowrap; }
   .resena-estrellas { display: block; color: #ffb400; font-size: 12px; margin-bottom: 4px; }
   .resena-comentario { font-size: 13px; color: #4a5160; line-height: 1.5; }
+  .resena-trabajo { font-size: 12px; color: #8b93a1; line-height: 1.5; margin-top: 4px; font-style: italic; }
   .sin-resenas { color: #9aa1ac; font-size: 13px; }
 
   .form-solicitud {
@@ -240,6 +241,7 @@ ${empresa.foto_url ? `<meta property="og:image" content="${escapeHtml(empresa.fo
         </div>
         <span class="resena-estrellas">${'★'.repeat(r.puntaje)}${'☆'.repeat(5 - r.puntaje)}</span>
         ${r.comentario ? `<p class="resena-comentario">${escapeHtml(r.comentario)}</p>` : ''}
+        ${r.descripcion_publica ? `<p class="resena-trabajo">${escapeHtml(r.descripcion_publica)}</p>` : ''}
       </div>
     `).join('') : '<div class="sin-resenas">Todavía no hay reseñas.</div>'}
   </div>
